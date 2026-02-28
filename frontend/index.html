@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MT5 Squeeze Scanner</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header>
+    <h1>MT5 Squeeze Scanner</h1>
+    <div class="quick-chart">
+      <label>Xem biểu đồ nhanh:</label>
+      <select id="quick-symbol"><option value="">-- Chọn cặp --</option></select>
+      <select id="quick-tf">
+        <option value="M15" selected>M15</option>
+        <option value="M30">M30</option>
+        <option value="H1">H1</option>
+      </select>
+      <button type="button" id="quick-chart-btn">Xem biểu đồ</button>
+    </div>
+  </header>
+
+  <div id="scan-status" class="scan-status" aria-live="polite"></div>
+
+  <div id="config-money" class="config-money" aria-label="Cấu hình đặt tiền">
+    <span class="config-money-label">Cấu hình đặt tiền:</span>
+    <label>Cắt lỗ (Risk) $</label>
+    <input type="number" id="config-risk-usd" min="1" max="500" value="20" step="1" />
+    <label>Lãi (TP) $</label>
+    <input type="number" id="config-tp-usd" min="0.1" max="500" value="15" step="0.5" />
+    <button type="button" id="config-money-save">Cập nhật</button>
+    <span id="config-money-msg" class="config-money-msg"></span>
+  </div>
+
+  <div class="tabs">
+    <button type="button" class="tab active" data-tab="all">All Signals</button>
+    <button type="button" class="tab" data-tab="watchlist">Watchlist (Hot)</button>
+    <button type="button" class="tab" data-tab="positions">Lệnh mở</button>
+    <button type="button" class="tab" data-tab="history">History</button>
+    <button type="button" class="tab" data-tab="settings">Settings</button>
+  </div>
+
+  <div id="panel-all" class="panel active">
+    <table class="signals-table">
+      <thead>
+        <tr>
+          <th>Symbol</th>
+          <th>TF</th>
+          <th>Pattern</th>
+          <th>Khuyến nghị</th>
+          <th>Entry</th>
+          <th>Score</th>
+          <th>Last Price</th>
+          <th>Time</th>
+          <th>Lot</th>
+          <th id="th-risk-all">Risk $20</th>
+          <th id="th-tp-all">TP $15</th>
+          <th>SL Price</th>
+          <th>TP Price</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="signals-body"></tbody>
+    </table>
+  </div>
+
+  <div id="panel-watchlist" class="panel">
+    <table class="signals-table watchlist-table">
+      <thead>
+        <tr>
+          <th>Symbol</th>
+          <th>TF</th>
+          <th>Pattern</th>
+          <th>Khuyến nghị</th>
+          <th>Entry</th>
+          <th>Score</th>
+          <th>Last Price</th>
+          <th>Time</th>
+          <th>Lot</th>
+          <th id="th-risk-watchlist">Risk $20</th>
+          <th id="th-tp-watchlist">TP $15</th>
+          <th>SL Price</th>
+          <th>TP Price</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="watchlist-body"></tbody>
+    </table>
+  </div>
+
+  <div id="panel-positions" class="panel">
+    <p class="positions-hint">Lệnh từ scanner (magic 202615). Khi lãi ≥ 5$, có thể chốt một nửa lot và đẩy SL phần còn lại lên breakeven.</p>
+    <div class="positions-toolbar">
+      <button type="button" id="positions-refresh">Làm mới</button>
+    </div>
+    <table class="signals-table positions-table">
+      <thead>
+        <tr>
+          <th>Ticket</th>
+          <th>Symbol</th>
+          <th>Loại</th>
+          <th>Volume</th>
+          <th>Entry</th>
+          <th>SL</th>
+          <th>TP</th>
+          <th>Profit $</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="positions-body"></tbody>
+    </table>
+    <div id="positions-message" class="settings-message" style="display:none;"></div>
+  </div>
+
+  <div id="panel-settings" class="panel">
+    <div class="settings-guide">
+      <strong>Hướng dẫn nhanh:</strong> Nếu chưa quen, hãy bấm <strong>Đặt lại mặc định</strong> rồi <strong>Lưu</strong> — đó là cấu hình cân bằng. Muốn <em>nhiều tín hiệu hơn</em> (dễ bắt): tăng ATR_SQUEEZE_RATIO (vd 0.5), tăng MA21_NEAR_ATR_RATIO (vd 0.5). Muốn <em>ít tín hiệu, chặt chẽ hơn</em>: giảm hai số đó (vd 0.3 và 0.2). Các tham số khác nên giữ mặc định trừ khi bạn đã hiểu rõ logic.
+    </div>
+    <table class="signals-table settings-table">
+      <thead>
+        <tr>
+          <th>Tham số</th>
+          <th>Giải thích và gợi ý</th>
+          <th>Mặc định</th>
+          <th>Giá trị</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>LOOKBACK_BARS</td>
+          <td class="settings-desc">Số nến gần nhất dùng để tính xu hướng và squeeze. Tăng = ổn định hơn nhưng phản ứng chậm. <strong>Khuyên: giữ 80.</strong></td>
+          <td class="settings-default">80</td>
+          <td><input type="number" id="set-LOOKBACK_BARS" min="50" max="300" step="1" placeholder="80" /></td>
+        </tr>
+        <tr>
+          <td>TRENDLINE_BARS</td>
+          <td class="settings-desc">Số đỉnh (bearish) hoặc đáy (bullish) dùng để vẽ đường xu hướng. <strong>Khuyên: giữ 10.</strong></td>
+          <td class="settings-default">10</td>
+          <td><input type="number" id="set-TRENDLINE_BARS" min="2" max="25" step="1" placeholder="6" /></td>
+        </tr>
+        <tr>
+          <td>SQUEEZE_BARS</td>
+          <td class="settings-desc">Số nến “vùng xiết”: các nến này phải nhỏ (body nhỏ) và nằm giữa trendline và MA21. <strong>Khuyên: giữ 8.</strong></td>
+          <td class="settings-default">8</td>
+          <td><input type="number" id="set-SQUEEZE_BARS" min="4" max="20" step="1" placeholder="8" /></td>
+        </tr>
+        <tr>
+          <td>ATR_SQUEEZE_RATIO</td>
+          <td class="settings-desc">Vùng squeeze chỉ hợp lệ khi body trung bình &lt; <em>giá trị này × ATR</em>. <strong>Tăng</strong> (vd 0.5) = chấp nhận nến to hơn = nhiều tín hiệu hơn. <strong>Giảm</strong> (vd 0.3) = chỉ nến rất nhỏ = ít tín hiệu, chặt hơn. <strong>Mặc định: 0.4.</strong></td>
+          <td class="settings-default">0.4</td>
+          <td><input type="number" id="set-ATR_SQUEEZE_RATIO" min="0.1" max="0.9" step="0.05" placeholder="0.4" /></td>
+        </tr>
+        <tr>
+          <td>SLOPE_MIN_ABS</td>
+          <td class="settings-desc">Đường xu hướng phải đủ dốc: bearish slope &lt; −giá trị này, bullish slope &gt; +giá trị này. Chỉ nên chỉnh khi bạn hiểu trendline. <strong>Khuyên: giữ 0.0001.</strong></td>
+          <td class="settings-default">0.0001</td>
+          <td><input type="number" id="set-SLOPE_MIN_ABS" min="0.00001" max="0.01" step="0.0001" placeholder="0.0001" /></td>
+        </tr>
+        <tr>
+          <td>MA21_NEAR_ATR_RATIO</td>
+          <td class="settings-desc">Nến cuối phải nằm gần MA21: khoảng cách ≤ <em>giá trị này × ATR</em>. <strong>Tăng</strong> (vd 0.5) = cho phép xa MA21 hơn = nhiều tín hiệu. <strong>Giảm</strong> (vd 0.2) = bắt buộc sát MA21 = ít tín hiệu, chặt hơn. <strong>Mặc định: 0.5.</strong></td>
+          <td class="settings-default">0.5</td>
+          <td><input type="number" id="set-MA21_NEAR_ATR_RATIO" min="0.1" max="1" step="0.05" placeholder="0.5" /></td>
+        </tr>
+        <tr>
+          <td>BAND_TOLERANCE_ATR_RATIO</td>
+          <td class="settings-desc">Độ rộng band (trendline–MA21) cho phép: ± <em>giá trị × ATR</em>. <strong>0.15</strong> = chặt (nến phải thật sự nằm giữa). Tăng (vd 0.25) = nhiều tín hiệu hơn. <strong>Mặc định: 0.15.</strong></td>
+          <td class="settings-default">0.15</td>
+          <td><input type="number" id="set-BAND_TOLERANCE_ATR_RATIO" min="0.05" max="0.35" step="0.05" placeholder="0.15" /></td>
+        </tr>
+        <tr>
+          <td>MIN_BARS_IN_BAND_RATIO</td>
+          <td class="settings-desc">Tỷ lệ nến squeeze phải nằm trong band. <strong>1</strong> = 100% (đúng mẫu: mọi nến giữa trendline và MA21). Giảm (vd 0.75) = nhiều tín hiệu, dễ lệch mẫu. <strong>Mặc định: 1.</strong></td>
+          <td class="settings-default">1</td>
+          <td><input type="number" id="set-MIN_BARS_IN_BAND_RATIO" min="0.3" max="1" step="0.05" placeholder="1" /></td>
+        </tr>
+        <tr>
+          <td>BAND_CENTER_MIN_RATIO</td>
+          <td class="settings-desc">Nến phải nằm <strong>giữa</strong> band: close cách mỗi biên ít nhất <em>giá trị × độ rộng band</em>. 0.15 = không dính sát trendline/MA21 (đúng mẫu hình). <strong>Mặc định: 0.15.</strong></td>
+          <td class="settings-default">0.15</td>
+          <td><input type="number" id="set-BAND_CENTER_MIN_RATIO" min="0.05" max="0.4" step="0.05" placeholder="0.15" /></td>
+        </tr>
+        <tr>
+          <td>HOT_WINDOW_MINUTES</td>
+          <td class="settings-desc">Signal xuất hiện trong X phút gần nhất sẽ vào tab Watchlist (Hot). Chỉ ảnh hưởng hiển thị, không ảnh hưởng logic phát hiện. <strong>Mặc định: 15.</strong></td>
+          <td class="settings-default">15</td>
+          <td><input type="number" id="set-HOT_WINDOW_MINUTES" min="5" max="120" step="1" placeholder="15" /></td>
+        </tr>
+        <tr>
+          <td>AUTO_TRADE_ENABLED</td>
+          <td class="settings-desc">Bật đặt lệnh tự động khi có signal <strong>M15, M30 hoặc H1</strong>: lệnh market, SL = MA21 ± 10 pip, <strong>lot tự tính</strong> để lỗ tối đa 20$, <strong>RR 1:2</strong>. Tối đa <strong>3 lệnh</strong> cùng lúc. <strong>Chỉ dùng khi đã test kỹ (demo).</strong></td>
+          <td class="settings-default">Tắt</td>
+          <td><input type="checkbox" id="set-AUTO_TRADE_ENABLED" /></td>
+        </tr>
+        <tr>
+          <td>AUTO_TRADE_LOT</td>
+          <td class="settings-desc">Lot <strong>tối đa</strong> cho phép (lot thực tế = tính từ 20$ lỗ, nhưng không vượt giá trị này). <strong>Mặc định: 10.</strong></td>
+          <td class="settings-default">10</td>
+          <td><input type="number" id="set-AUTO_TRADE_LOT" min="0.01" max="100" step="0.01" placeholder="10" /></td>
+        </tr>
+        <tr>
+          <td>AUTO_TRADE_LOT_MULTIPLIER</td>
+          <td class="settings-desc"><strong>Cấp số nhân lot:</strong> lot trước khi gửi lệnh = lot tính từ risk × hệ số này. 1 = giữ nguyên; 2 = gấp đôi; 0.5 = nửa lot. Để chủ động tăng/giảm đánh giá chiến lược. <strong>Mặc định: 1.</strong></td>
+          <td class="settings-default">1</td>
+          <td><input type="number" id="set-AUTO_TRADE_LOT_MULTIPLIER" min="0.1" max="10" step="0.1" placeholder="1" /></td>
+        </tr>
+        <tr>
+          <td>AUTO_TRADE_SL_PIPS</td>
+          <td class="settings-desc">SL cách MA21 đúng bao nhiêu pip (không quá 10 giá). BUY: SL = MA21 − giá trị này; SELL: SL = MA21 + giá trị này. <strong>Mặc định: 10.</strong></td>
+          <td class="settings-default">10</td>
+          <td><input type="number" id="set-AUTO_TRADE_SL_PIPS" min="1" max="500" step="1" placeholder="10" /></td>
+        </tr>
+        <tr>
+          <td>AUTO_TRADE_TP_PIPS</td>
+          <td class="settings-desc">TP hiện tính theo <strong>RR 1:2</strong> (TP = 2 × khoảng cách SL). Trường này giữ cho tương thích.</td>
+          <td class="settings-default">30</td>
+          <td><input type="number" id="set-AUTO_TRADE_TP_PIPS" min="1" max="1000" step="1" placeholder="30" /></td>
+        </tr>
+        <tr>
+          <td>MAX_OPEN_POSITIONS</td>
+          <td class="settings-desc"><strong>Số cặp tiền / lệnh tối đa đang giữ.</strong> Auto trade không đặt thêm lệnh khi đã đủ số này. <strong>Mặc định: 3.</strong></td>
+          <td class="settings-default">3</td>
+          <td><input type="number" id="set-MAX_OPEN_POSITIONS" min="1" max="20" step="1" placeholder="3" /></td>
+        </tr>
+        <tr>
+          <td>AUTO_TRADE_COOLDOWN_MINUTES</td>
+          <td class="settings-desc">Sau khi đặt (hoặc đóng) lệnh một cặp, <strong>không đặt lại cặp đó trong N phút</strong>. Tránh đặt trùng mỗi nến (nhiều lệnh nhỏ, lãi lẻ). 0 = tắt cooldown. <strong>Mặc định: 60.</strong></td>
+          <td class="settings-default">60</td>
+          <td><input type="number" id="set-AUTO_TRADE_COOLDOWN_MINUTES" min="0" max="1440" step="1" placeholder="60" /></td>
+        </tr>
+        <tr>
+          <td>FIXED_RISK_USD</td>
+          <td class="settings-desc">Dự báo SELL (Mẫu 1 Bearish): lỗ tối đa mỗi lệnh (USD). <strong>Mặc định: 20.</strong></td>
+          <td class="settings-default">20</td>
+          <td><input type="number" id="set-FIXED_RISK_USD" min="1" max="500" step="1" placeholder="20" /></td>
+        </tr>
+        <tr>
+          <td>FIXED_PROFIT_USD</td>
+          <td class="settings-desc">Lợi nhuận mục tiêu SELL (USD) → đóng lệnh khi đạt hoặc set TP price. <strong>Mặc định: 15.</strong></td>
+          <td class="settings-default">15</td>
+          <td><input type="number" id="set-FIXED_PROFIT_USD" min="0.1" max="500" step="0.5" placeholder="15" /></td>
+        </tr>
+        <tr>
+          <td>SL_MULTIPLIER</td>
+          <td class="settings-desc">Khoảng cách SL = ATR × giá trị này. <strong>Mặc định: 1.5.</strong></td>
+          <td class="settings-default">1.5</td>
+          <td><input type="number" id="set-SL_MULTIPLIER" min="0.5" max="5" step="0.1" placeholder="1.5" /></td>
+        </tr>
+        <tr>
+          <td>AUTO_TAKE_PROFIT_ENABLED</td>
+          <td class="settings-desc"><strong>Auto tự chốt lãi:</strong> khi lãi lệnh đạt ngưỡng (USD) bên dưới, tự động đóng ~50% lot và đẩy SL phần còn lại lên breakeven. Chỉ áp dụng lệnh magic 202615.</td>
+          <td class="settings-default">Tắt</td>
+          <td><input type="checkbox" id="set-AUTO_TAKE_PROFIT_ENABLED" /></td>
+        </tr>
+        <tr>
+          <td>AUTO_TAKE_PROFIT_MIN_USD</td>
+          <td class="settings-desc">Ngưỡng lãi tối thiểu (USD) để kích hoạt auto chốt lãi (đóng ½ + SL breakeven). <strong>Mặc định: 5.</strong></td>
+          <td class="settings-default">5</td>
+          <td><input type="number" id="set-AUTO_TAKE_PROFIT_MIN_USD" min="1" max="100" step="0.5" placeholder="5" /></td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="settings-actions">
+      <button type="button" id="settings-load">Lấy hiện tại</button>
+      <button type="button" id="settings-reset-defaults">Đặt lại mặc định</button>
+      <button type="button" id="settings-save" onclick="if(window.saveSettingsClick) window.saveSettingsClick();">Lưu</button>
+    </div>
+    <div id="settings-message" class="settings-message" style="display:none;"></div>
+  </div>
+
+  <div id="panel-history" class="panel">
+    <div class="history-toolbar">
+      <button type="button" id="history-refresh">Làm mới</button>
+      <label>Symbol:</label>
+      <input type="text" id="history-filter-symbol" placeholder="VD: XAUUSDm" />
+      <label>TF:</label>
+      <select id="history-filter-tf">
+        <option value="">Tất cả</option>
+        <option value="M15">M15</option>
+        <option value="M30">M30</option>
+        <option value="H1">H1</option>
+      </select>
+    </div>
+    <table class="signals-table history-table">
+      <thead>
+        <tr>
+          <th>Ngày giờ phát hiện</th>
+          <th>Symbol</th>
+          <th>TF</th>
+          <th>Pattern</th>
+          <th>Score</th>
+          <th>Last Price</th>
+          <th>Lot</th>
+          <th>Risk $</th>
+          <th>TP $</th>
+          <th>SL Price</th>
+          <th>TP Price</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="history-body"></tbody>
+    </table>
+  </div>
+
+  <div id="chart-modal" class="modal" aria-hidden="true">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="chart-title">Chart</h2>
+        <button type="button" class="close-btn" id="close-chart">&times;</button>
+      </div>
+      <div id="chart-container"></div>
+      <div id="chart-notes" class="chart-notes" aria-live="polite"></div>
+      <div id="chart-error" class="chart-error" style="display:none;"></div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
+  <script src="script.js" defer></script>
+</body>
+</html>

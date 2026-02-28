@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+
+# DB (local)
+*.db
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+Thumbs.db

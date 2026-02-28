@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chart — MT5 Squeeze Scanner</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, sans-serif; background: #131722; color: #d1d4dc; min-height: 100vh; display: flex; flex-direction: column; }
+    .chart-header { padding: 0.5rem 1rem; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; border-bottom: 1px solid #2B2B43; }
+    .chart-header h1 { margin: 0; font-size: 1.25rem; }
+    #chart-container { flex: 1; min-height: 400px; width: 100%; }
+    .chart-notes { padding: 0.5rem 1rem; font-size: 0.875rem; color: #8b949e; }
+    .chart-notes .note-entry { color: #9e9e9e; }
+    .chart-notes .note-sl { color: #ef5350; }
+    .chart-notes .note-tp { color: #26a69a; }
+    .chart-notes .note-trendline { color: #ce49bf; }
+    .chart-error { padding: 1rem; color: #f85149; background: rgba(248,81,73,0.1); margin: 1rem; border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <div class="chart-header">
+    <h1 id="chart-title">—</h1>
+  </div>
+  <div id="chart-container"></div>
+  <div id="chart-notes" class="chart-notes"></div>
+  <div id="chart-error" class="chart-error" style="display:none;"></div>
+
+  <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
+  <script>
+(function () {
+  var params = new URLSearchParams(window.location.search);
+  var symbol = (params.get('symbol') || '').trim();
+  var tf = (params.get('tf') || 'M15').trim();
+  var entry = params.get('entry');
+  var sl = params.get('sl');
+  var tp = params.get('tp');
+  var side = (params.get('side') || 'buy').toLowerCase();
+  var apiBase = params.get('api');
+  if (!apiBase || !apiBase.startsWith('http')) {
+    var o = window.location.origin;
+    apiBase = (o && o.startsWith('http')) ? o.replace(/:\d+$/, '') + ':8000' : 'http://127.0.0.1:8000';
+  }
+
+  var chartContainer = document.getElementById('chart-container');
+  var chartNotes = document.getElementById('chart-notes');
+  var chartError = document.getElementById('chart-error');
+  var chartTitle = document.getElementById('chart-title');
+
+  if (!symbol) {
+    chartError.textContent = 'Thiếu symbol. Mở chart từ bảng tín hiệu (bấm Chart).';
+    chartError.style.display = 'block';
+    document.title = 'Chart — Lỗi';
+    return;
+  }
+
+  chartTitle.textContent = symbol + ' ' + tf;
+  document.title = symbol + ' ' + tf + ' — Chart';
+
+  var createChartFn = (window.LightweightCharts && window.LightweightCharts.createChart) || (window.lightweightCharts && window.lightweightCharts.createChart) || window.createChart;
+  if (!createChartFn) {
+    chartError.textContent = 'Thư viện biểu đồ chưa tải.';
+    chartError.style.display = 'block';
+    return;
+  }
+
+  var chartInstance = createChartFn(chartContainer, {
+    width: chartContainer.clientWidth,
+    height: Math.max(400, window.innerHeight - 120),
+    layout: { background: { type: 'solid', color: '#131722' }, textColor: '#d1d4dc' },
+    grid: { vertLines: { color: '#2B2B43' }, horzLines: { color: '#363c4e' } },
+    rightPriceScale: { borderColor: '#485c7b' },
+    timeScale: { borderColor: '#485c7b', timeVisible: true, secondsVisible: false, rightOffset: 12 }
+  });
+
+  window.addEventListener('resize', function () {
+    if (chartInstance && chartContainer) chartInstance.applyOptions({ width: chartContainer.clientWidth, height: Math.max(400, window.innerHeight - 120) });
+  });
+
+  var priceFormat = { type: 'price', precision: 3, minMove: 0.001 };
+  var chartCandleSeries = chartInstance.addCandlestickSeries({
+    upColor: '#26a69a',
+    downColor: '#ef5350',
+    borderVisible: true,
+    priceFormat: priceFormat
+  });
+
+  var ratesUrl = apiBase + '/rates?symbol=' + encodeURIComponent(symbol) + '&tf=' + encodeURIComponent(tf);
+  fetch(ratesUrl)
+    .then(function (r) { if (!r.ok) throw new Error('No data'); return r.json(); })
+    .then(function (bars) {
+      if (!bars || bars.length === 0) throw new Error('No data');
+      var ohlc = bars.map(function (b) {
+        return { time: Number(b.time), open: Number(b.open), high: Number(b.high), low: Number(b.low), close: Number(b.close) };
+      });
+      chartCandleSeries.setData(ohlc);
+      chartInstance.timeScale().fitContent();
+
+      var closes = ohlc.map(function (c) { return c.close; });
+      var ma21Data = [];
+      for (var i = 0; i < ohlc.length; i++) {
+        if (i >= 20) {
+          var sum = closes.slice(i - 20, i + 1).reduce(function (a, b) { return a + b; }, 0);
+          ma21Data.push({ time: ohlc[i].time, value: sum / 21 });
+        }
+      }
+      if (ma21Data.length) {
+        var maSeries = chartInstance.addLineSeries({ color: 'rgba(255,193,7,1)', lineWidth: 2, priceFormat: priceFormat });
+        maSeries.setData(ma21Data);
+      }
+
+      if (entry != null && sl != null && tp != null && chartCandleSeries) {
+        var entryVal = Number(entry);
+        var slVal = Number(sl);
+        var tpVal = Number(tp);
+        chartCandleSeries.createPriceLine({ price: entryVal, color: '#9e9e9e', lineWidth: 1, lineStyle: 2, axisLabelVisible: false });
+        chartCandleSeries.createPriceLine({ price: slVal, color: '#ef5350', lineWidth: 2, lineStyle: 0, axisLabelVisible: false });
+        chartCandleSeries.createPriceLine({ price: tpVal, color: '#26a69a', lineWidth: 2, lineStyle: 0, axisLabelVisible: false });
+        chartNotes.innerHTML = '<span class="note-entry">Entry (' + (side === 'sell' ? 'SELL' : 'BUY') + '): ' + entryVal.toFixed(5) + '</span> &nbsp;|&nbsp; <span class="note-sl">SL: ' + slVal.toFixed(5) + '</span> &nbsp;|&nbsp; <span class="note-tp">TP: ' + tpVal.toFixed(5) + '</span>';
+      }
+
+      var indicatorsUrl = apiBase + '/chart-indicators?symbol=' + encodeURIComponent(symbol) + '&tf=' + encodeURIComponent(tf);
+      return fetch(indicatorsUrl).then(function (r) { return r.ok ? r.json() : { trendline: null }; });
+    })
+    .then(function (data) {
+      if (data.trendline && data.trendline.length > 0 && chartInstance) {
+        var tlSeries = chartInstance.addLineSeries({
+          color: '#ce49bf',
+          lineWidth: 3,
+          priceFormat: priceFormat,
+          title: '',
+          lastValueVisible: false,
+          priceLineVisible: false
+        });
+        var tlData = data.trendline.map(function (p) { return { time: Number(p.time), value: Number(p.value) }; });
+        tlSeries.setData(tlData);
+        chartInstance.timeScale().fitContent();
+        var trendText = '<span class="note-trendline">Trendline: có (đường tím)</span>';
+        chartNotes.innerHTML = chartNotes.innerHTML ? (chartNotes.innerHTML + ' &nbsp;|&nbsp; ' + trendText) : trendText;
+      } else if (!chartNotes.innerHTML) {
+        chartNotes.innerHTML = '<span class="note-trendline">Trendline: không có (hoặc cặp chưa có tín hiệu)</span>';
+      }
+    })
+    .catch(function (err) {
+      chartError.textContent = 'Không tải được dữ liệu. Kiểm tra MT5 đã mở, symbol \"' + symbol + '\" có trong Market Watch, và backend chạy tại ' + apiBase;
+      chartError.style.display = 'block';
+    });
+})();
+  </script>
+</body>
+</html>
