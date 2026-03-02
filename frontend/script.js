@@ -302,12 +302,12 @@
             <td class="lot-cell">${tpStr(r)}</td>
             <td>${slStr(r)}</td>
             <td>${tpPriceStr(r)}</td>
-            <td><button type="button" class="btn-chart" data-symbol="${escapeHtml(r.symbol)}" data-tf="${escapeHtml(r.tf)}">Chart</button></td>
+            <td><button type="button" class="btn-chart" data-symbol="${escapeHtml(r.symbol)}" data-tf="${escapeHtml(r.tf)}" data-bar-time="${r.bar_time != null ? r.bar_time : ''}">Chart</button></td>
           </tr>
         `).join('')
       : emptyRow;
     historyBody.querySelectorAll('.btn-chart').forEach(btn => {
-      btn.addEventListener('click', () => openChart(btn.dataset.symbol, btn.dataset.tf));
+      btn.addEventListener('click', () => openChart(btn.dataset.symbol, btn.dataset.tf, btn.dataset.barTime || null));
     });
   }
 
@@ -353,7 +353,7 @@
     renderWatchlist();
   }
 
-  function openChart(symbol, tf) {
+  function openChart(symbol, tf, barTime) {
     if (!symbol || !symbol.trim()) return;
     symbol = symbol.trim();
     tf = tf || 'M15';
@@ -362,6 +362,7 @@
     if (s && s.entry_price != null && s.sl_price != null && s.tp_price != null) {
       q += '&entry=' + encodeURIComponent(String(s.entry_price)) + '&sl=' + encodeURIComponent(String(s.sl_price)) + '&tp=' + encodeURIComponent(String(s.tp_price)) + '&side=' + (s.recommendation === 'BÁN' ? 'sell' : 'buy');
     }
+    if (barTime) q += '&bar_time=' + encodeURIComponent(barTime);
     q += '&api=' + encodeURIComponent(API_BASE);
     window.open(q, '_blank');
   }
@@ -433,9 +434,9 @@
 
   if (positionsRefreshBtn) positionsRefreshBtn.addEventListener('click', loadPositions);
 
-  const SETTING_KEYS = ['LOOKBACK_BARS', 'TRENDLINE_BARS', 'SQUEEZE_BARS', 'ATR_SQUEEZE_RATIO', 'SLOPE_MIN_ABS', 'MA21_NEAR_ATR_RATIO', 'BAND_TOLERANCE_ATR_RATIO', 'MIN_BARS_IN_BAND_RATIO', 'BAND_CENTER_MIN_RATIO', 'HOT_WINDOW_MINUTES', 'AUTO_TRADE_ENABLED', 'AUTO_TRADE_LOT', 'AUTO_TRADE_LOT_MULTIPLIER', 'AUTO_TRADE_SL_PIPS', 'AUTO_TRADE_TP_PIPS', 'MAX_OPEN_POSITIONS', 'AUTO_TRADE_COOLDOWN_MINUTES', 'FIXED_RISK_USD', 'FIXED_PROFIT_USD', 'SL_MULTIPLIER', 'AUTO_TAKE_PROFIT_ENABLED', 'AUTO_TAKE_PROFIT_MIN_USD'];
+  const SETTING_KEYS = ['LOOKBACK_BARS', 'SQUEEZE_BARS', 'ATR_SQUEEZE_RATIO', 'SLOPE_MIN_ABS', 'MA21_NEAR_ATR_RATIO', 'BAND_TOLERANCE_ATR_RATIO', 'MIN_BARS_IN_BAND_RATIO', 'BAND_CENTER_MIN_RATIO', 'HOT_WINDOW_MINUTES', 'AUTO_TRADE_ENABLED', 'AUTO_TRADE_LOT', 'AUTO_TRADE_LOT_MULTIPLIER', 'AUTO_TRADE_SL_PIPS', 'AUTO_TRADE_TP_PIPS', 'MAX_OPEN_POSITIONS', 'AUTO_TRADE_COOLDOWN_MINUTES', 'FIXED_RISK_USD', 'FIXED_PROFIT_USD', 'SL_MULTIPLIER', 'AUTO_TAKE_PROFIT_ENABLED', 'AUTO_TAKE_PROFIT_MIN_USD'];
   const FLOAT_KEYS = ['ATR_SQUEEZE_RATIO', 'SLOPE_MIN_ABS', 'MA21_NEAR_ATR_RATIO', 'BAND_TOLERANCE_ATR_RATIO', 'MIN_BARS_IN_BAND_RATIO', 'BAND_CENTER_MIN_RATIO', 'AUTO_TRADE_LOT', 'AUTO_TRADE_LOT_MULTIPLIER', 'FIXED_RISK_USD', 'FIXED_PROFIT_USD', 'SL_MULTIPLIER', 'AUTO_TAKE_PROFIT_MIN_USD'];
-  const DEFAULT_SETTINGS = { LOOKBACK_BARS: 80, TRENDLINE_BARS: 6, SQUEEZE_BARS: 5, ATR_SQUEEZE_RATIO: 0.55, SLOPE_MIN_ABS: 0.00005, MA21_NEAR_ATR_RATIO: 0.5, BAND_TOLERANCE_ATR_RATIO: 0.15, MIN_BARS_IN_BAND_RATIO: 1, BAND_CENTER_MIN_RATIO: 0.15, HOT_WINDOW_MINUTES: 15, AUTO_TRADE_ENABLED: false, AUTO_TRADE_LOT: 10, AUTO_TRADE_LOT_MULTIPLIER: 1, AUTO_TRADE_SL_PIPS: 10, AUTO_TRADE_TP_PIPS: 30, MAX_OPEN_POSITIONS: 3, AUTO_TRADE_COOLDOWN_MINUTES: 60, FIXED_RISK_USD: 20, FIXED_PROFIT_USD: 15, SL_MULTIPLIER: 1.5, AUTO_TAKE_PROFIT_ENABLED: false, AUTO_TAKE_PROFIT_MIN_USD: 5 };
+  const DEFAULT_SETTINGS = { LOOKBACK_BARS: 80, SQUEEZE_BARS: 5, ATR_SQUEEZE_RATIO: 0.55, SLOPE_MIN_ABS: 0.00005, MA21_NEAR_ATR_RATIO: 0.5, BAND_TOLERANCE_ATR_RATIO: 0.15, MIN_BARS_IN_BAND_RATIO: 1, BAND_CENTER_MIN_RATIO: 0.15, HOT_WINDOW_MINUTES: 15, AUTO_TRADE_ENABLED: false, AUTO_TRADE_LOT: 10, AUTO_TRADE_LOT_MULTIPLIER: 1, AUTO_TRADE_SL_PIPS: 10, AUTO_TRADE_TP_PIPS: 30, MAX_OPEN_POSITIONS: 3, AUTO_TRADE_COOLDOWN_MINUTES: 60, FIXED_RISK_USD: 20, FIXED_PROFIT_USD: 15, SL_MULTIPLIER: 1.5, AUTO_TAKE_PROFIT_ENABLED: false, AUTO_TAKE_PROFIT_MIN_USD: 5 };
   const settingsMessage = document.getElementById('settings-message');
 
   function fillSettingsForm(data) {

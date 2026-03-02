@@ -36,6 +36,7 @@
   var sl = params.get('sl');
   var tp = params.get('tp');
   var side = (params.get('side') || 'buy').toLowerCase();
+  var barTime = params.get('bar_time'); // từ History: trendline đúng thời điểm tín hiệu
   var apiBase = params.get('api');
   if (!apiBase || !apiBase.startsWith('http')) {
     var o = window.location.origin;
@@ -120,6 +121,7 @@
       }
 
       var indicatorsUrl = apiBase + '/chart-indicators?symbol=' + encodeURIComponent(symbol) + '&tf=' + encodeURIComponent(tf);
+      if (barTime) indicatorsUrl += '&bar_time=' + encodeURIComponent(barTime);
       return fetch(indicatorsUrl).then(function (r) { return r.ok ? r.json() : { trendline: null }; });
     })
     .then(function (data) {
@@ -135,7 +137,15 @@
         var tlData = data.trendline.map(function (p) { return { time: Number(p.time), value: Number(p.value) }; });
         tlSeries.setData(tlData);
         chartInstance.timeScale().fitContent();
-        var trendText = '<span class="note-trendline">Trendline: có (đường tím)</span>';
+        var trendParts = ['<span class="note-trendline">Trendline (đường tím):</span>'];
+        if (data.pattern) trendParts.push(' ' + data.pattern + '.');
+        var lookback = data.trend_lookback != null ? data.trend_lookback : 15;
+        var peakType = data.peak_type === 'low' ? 'đáy' : 'đỉnh';
+        trendParts.push(' Đường nối 2 ' + peakType + ' trong ' + lookback + ' nến gần nhất.');
+        if (data.squeeze_zone && data.squeeze_zone.start_time != null && data.squeeze_zone.end_time != null) {
+          trendParts.push(' Vùng xiết (nến giữa trendline và MA21): từ nến ' + data.squeeze_zone.start_time + ' đến ' + data.squeeze_zone.end_time + '.');
+        }
+        var trendText = '<span class="note-trendline">' + trendParts.join('') + '</span>';
         chartNotes.innerHTML = chartNotes.innerHTML ? (chartNotes.innerHTML + ' &nbsp;|&nbsp; ' + trendText) : trendText;
       } else if (!chartNotes.innerHTML) {
         chartNotes.innerHTML = '<span class="note-trendline">Trendline: không có (hoặc cặp chưa có tín hiệu)</span>';

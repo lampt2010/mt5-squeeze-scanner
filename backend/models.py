@@ -6,6 +6,11 @@ DEFAULT_SYMBOLS = [
     "USDCAD", "USDCHF", "XAUUSD", "XAGUSD", "BTCUSD",
 ]
 
+# Cuối tuần (thị trường forex đóng): chỉ quét các cặp tiền ảo để nhẹ. Có thể chỉnh trong scanner_config.json.
+WEEKEND_SYMBOLS = [
+    "BTCUSD", "ETHUSD", "LTCUSD", "XRPUSD", "BCHUSD",
+]
+
 # Timeframes: name -> MT5 constant
 TIMEFRAMES = {
     "M1": None,
@@ -18,7 +23,7 @@ TIMEFRAMES = {
 LOOKBACK_BARS = 80
 # Số nến gần nhất dùng để xác định trend (Mẫu 1/2); 200 nến vẫn lấy cho chart/API
 TREND_LOOKBACK_BARS = 15
-TRENDLINE_BARS = 6          # (Không dùng) Trendline giờ = đường nối đỉnh/đáy đầu và cuối trong cửa sổ; giữ key để tương thích config/UI.
+# TRENDLINE_BARS không còn dùng: trendline = đường nối đỉnh đầu + đỉnh cuối (hoặc đáy đầu + đáy cuối) trong cửa sổ TREND_LOOKBACK_BARS, với ít nhất MIN_PEAKS đỉnh/đáy. Giá trị 6 chỉ để tham chiếu cũ.
 SQUEEZE_BARS = 5            # Cửa sổ squeeze ngắn hơn (8→5) → dễ thỏa
 ATR_SQUEEZE_RATIO = 0.55    # Avg body < 55% ATR (0.4→0.55: cho phép nến to hơn một chút)
 SLOPE_MIN_ABS = 0.00005     # Slope tối thiểu (giảm: trendline thoải hơn vẫn chấp nhận)
@@ -34,6 +39,7 @@ HOT_WINDOW_MINUTES = 15
 # Auto trade (chỉ M15): đặt lệnh market khi có signal, SL = MA21 ± 10 pip, TP = entry ± 30 pip
 AUTO_TRADE_ENABLED = False
 AUTO_TRADE_LOT = 10.0  # lot tối đa (lot thực tế tính từ lỗ 20$)
+AUTO_TRADE_MIN_LOT = 0.01  # lot tối thiểu; nếu tính ra < MIN_LOT thì dùng MIN_LOT (risk thực tế có thể > FIXED_RISK_USD khi SL xa)
 AUTO_TRADE_LOT_MULTIPLIER = 1.0  # Hệ số nhân lot: lot cuối = lot tính × hệ số (để chủ động tăng/giảm đánh giá chiến lược)
 AUTO_TRADE_SL_PIPS = 10
 AUTO_TRADE_TP_PIPS = 30

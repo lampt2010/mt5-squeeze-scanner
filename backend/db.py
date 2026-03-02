@@ -1,5 +1,6 @@
-"""SQLite persistence for detection history."""
+"""SQLite persistence for detection history and scanner config."""
 
+import json
 import logging
 import sqlite3
 from datetime import datetime
@@ -19,7 +20,7 @@ def get_connection() -> sqlite3.Connection:
 
 
 def init_db() -> None:
-    """Create detection_history table if not exists."""
+    """Create detection_history and scanner_config tables if not exists."""
     conn = get_connection()
     try:
         conn.execute("""
@@ -33,6 +34,13 @@ def init_db() -> None:
                 score REAL,
                 last_price REAL,
                 UNIQUE(symbol, tf, bar_time)
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS scanner_config (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                config_json TEXT NOT NULL,
+                updated_at TEXT NOT NULL
             )
         """)
         conn.commit()
@@ -76,6 +84,38 @@ def save_detections(signals: List[Dict[str, Any]]) -> None:
     """Save each signal; duplicates (same symbol, tf, bar_time) are ignored."""
     for s in signals:
         save_detection(s)
+
+
+def load_config_from_db() -> Optional[Dict[str, Any]]:
+    """Load scanner config from DB. Returns None if no row or invalid JSON."""
+    conn = get_connection()
+    try:
+        row = conn.execute("SELECT config_json FROM scanner_config WHERE id = 1").fetchone()
+        if row is None:
+            return None
+        return json.loads(row["config_json"])
+    except Exception as e:
+        logger.debug("load_config_from_db: %s", e)
+        return None
+    finally:
+        conn.close()
+
+
+def save_config_to_db(config: Dict[str, Any]) -> None:
+    """Save full config to DB (overwrite)."""
+    conn = get_connection()
+    try:
+        updated_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        conn.execute(
+            "INSERT OR REPLACE INTO scanner_config (id, config_json, updated_at) VALUES (1, ?, ?)",
+            (json.dumps(config), updated_at),
+        )
+        conn.commit()
+    except Exception as e:
+        logger.exception("save_config_to_db failed: %s", e)
+        raise
+    finally:
+        conn.close()
 
 
 def get_history(limit: int = 100, symbol: Optional[str] = None, tf: Optional[str] = None) -> List[Dict[str, Any]]:

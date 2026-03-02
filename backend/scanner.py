@@ -268,42 +268,61 @@ def _check_bearish_squeeze(df: pd.DataFrame) -> Optional[Dict[str, Any]]:
         return None
 
     trendline_last = slope * (len(win) - 1) + intercept
-    squeeze_win = win.iloc[-squeeze_bars:]
+    # Vùng xiết = các nến nằm GIỮA hai nến dùng để vẽ trendline (từ p1 đến p2, bao gồm cả hai đầu)
+    squeeze_win = win.iloc[p1 : p2 + 1]
+    squeeze_bars_actual = len(squeeze_win)
+    if squeeze_bars_actual < 2 or squeeze_bars_actual < squeeze_bars:
+        return None
 
     body = (squeeze_win["close"] - squeeze_win["open"]).abs()
     if body.mean() >= atr_ratio * atr_val:
         return None
 
+    n_df = len(df)
+    start_df = n_df - trend_lookback + p1
+    end_df = n_df - trend_lookback + p2 + 1
+    if start_df < 20 or end_df > n_df:
+        return None
+    ma21_vals = ma21_full.iloc[start_df:end_df].values
     tol = band_tol_ratio * atr_val
-    ma21_vals = ma21_full.iloc[-squeeze_bars:].values
     in_band = 0
     in_center = 0
-    for i in range(squeeze_bars):
+    for i in range(squeeze_bars_actual):
         bar_open = float(squeeze_win["open"].iloc[i])
         bar_close = float(squeeze_win["close"].iloc[i])
         body_low = min(bar_open, bar_close)
         body_high = max(bar_open, bar_close)
-        ti = len(win) - squeeze_bars + i  # chỉ số bar trong win
+        ti = p1 + i
         tl_val = slope * ti + intercept
         ma = ma21_vals[i]
+        band_width = tl_val - ma
+        # Band phải hợp lệ: trendline (resistance) phải ở trên MA21; nếu không thì nến không thể "nằm giữa"
+        if band_width <= tol:
+            continue
+        # Thân nến không được nằm hoàn toàn ngoài: phải overlap vùng (ma, tl_val)
+        if body_high < ma or body_low > tl_val:
+            continue
         # Thân nến (body) phải nằm trong band: dưới trendline, trên MA21 (không chỉ râu)
         if body_high <= tl_val + tol and body_low >= ma - tol:
             in_band += 1
         # Nến phải nằm "giữa" band: close không sát trendline hay MA21 (đúng mẫu hình 2)
-        band_width = tl_val - ma
-        if band_width > tol:
-            low_bound = ma + band_width * band_center_ratio
-            high_bound = tl_val - band_width * band_center_ratio
-            if low_bound <= bar_close <= high_bound:
-                in_center += 1
-    if in_band < max(1, int(squeeze_bars * min_in_band_ratio)):
+        low_bound = ma + band_width * band_center_ratio
+        high_bound = tl_val - band_width * band_center_ratio
+        if low_bound <= bar_close <= high_bound:
+            in_center += 1
+    if in_band < max(1, int(squeeze_bars_actual * min_in_band_ratio)):
         return None
-    if in_center < max(1, int(squeeze_bars * min_in_band_ratio)):
+    if in_center < max(1, int(squeeze_bars_actual * min_in_band_ratio)):
         return None
 
     last_ma = float(ma21_full.iloc[-1])
     last_close = float(close.iloc[-1])
     if abs(last_close - last_ma) > ma21_near * atr_val:
+        return None
+    # Nến cuối (đã đóng) phải vẫn nằm TRONG band: dưới trendline, trên MA21 — không cảnh báo khi đã phá lên
+    if last_close > trendline_last + tol:
+        return None
+    if last_close < last_ma - tol:
         return None
 
     score = max(0, min(1, 1 - body.mean() / (atr_ratio * atr_val)))
@@ -365,45 +384,65 @@ def _check_bullish_squeeze(df: pd.DataFrame) -> Optional[Dict[str, Any]]:
     if slope <= slope_min:
         return None
 
-    squeeze_win = win.iloc[-squeeze_bars:]
+    # Vùng xiết = các nến nằm GIỮA hai nến dùng để vẽ trendline (từ p1 đến p2)
+    squeeze_win = win.iloc[p1 : p2 + 1]
+    squeeze_bars_actual = len(squeeze_win)
+    if squeeze_bars_actual < 2 or squeeze_bars_actual < squeeze_bars:
+        return None
+
     body = (squeeze_win["close"] - squeeze_win["open"]).abs()
     if body.mean() >= atr_ratio * atr_val:
         return None
 
-    ma21_vals = ma21_full.iloc[-squeeze_bars:].values
+    n_df = len(df)
+    start_df = n_df - trend_lookback + p1
+    end_df = n_df - trend_lookback + p2 + 1
+    if start_df < 20 or end_df > n_df:
+        return None
+    ma21_vals = ma21_full.iloc[start_df:end_df].values
     tol = band_tol_ratio * atr_val
     in_band = 0
     in_center = 0
-    for i in range(squeeze_bars):
+    for i in range(squeeze_bars_actual):
         bar_open = float(squeeze_win["open"].iloc[i])
         bar_close = float(squeeze_win["close"].iloc[i])
         body_low = min(bar_open, bar_close)
         body_high = max(bar_open, bar_close)
-        ti = len(win) - squeeze_bars + i
+        ti = p1 + i
         tl_val = slope * ti + intercept
         ma = ma21_vals[i]
+        band_width = ma - tl_val
+        # Band phải hợp lệ: MA21 phải ở trên trendline (support); nếu không thì nến không thể "nằm giữa"
+        if band_width <= tol:
+            continue
+        # Thân nến không được nằm hoàn toàn ngoài: phải overlap vùng (tl_val, ma)
+        if body_low > ma or body_high < tl_val:
+            continue
         # Thân nến (body) phải nằm trong band: trên trendline (support), dưới MA21
         if body_low >= tl_val - tol and body_high <= ma + tol:
             in_band += 1
         # Nến phải nằm "giữa" band: close không sát trendline hay MA21 (đúng mẫu)
-        band_width = ma - tl_val
-        if band_width > tol:
-            low_bound = tl_val + band_width * band_center_ratio
-            high_bound = ma - band_width * band_center_ratio
-            if low_bound <= bar_close <= high_bound:
-                in_center += 1
-    if in_band < max(1, int(squeeze_bars * min_in_band_ratio)):
+        low_bound = tl_val + band_width * band_center_ratio
+        high_bound = ma - band_width * band_center_ratio
+        if low_bound <= bar_close <= high_bound:
+            in_center += 1
+    if in_band < max(1, int(squeeze_bars_actual * min_in_band_ratio)):
         return None
-    if in_center < max(1, int(squeeze_bars * min_in_band_ratio)):
+    if in_center < max(1, int(squeeze_bars_actual * min_in_band_ratio)):
         return None
 
     last_ma = float(ma21_full.iloc[-1])
     last_close = float(close.iloc[-1])
     if abs(last_close - last_ma) > ma21_near * atr_val:
         return None
+    trendline_last = slope * (len(win) - 1) + intercept
+    # Nến cuối (đã đóng) phải vẫn nằm TRONG band: trên trendline (support), dưới MA21 — không cảnh báo khi đã ra ngoài
+    if last_close < trendline_last - tol:
+        return None
+    if last_close > last_ma + tol:
+        return None
 
     score = max(0, min(1, 1 - body.mean() / (atr_ratio * atr_val)))
-    trendline_last = slope * (len(win) - 1) + intercept
     return {
         "pattern": "MẪU_2_BULLISH",
         "score": round(score, 2),
@@ -680,15 +719,23 @@ def _check_early_breakout(df: pd.DataFrame) -> Optional[Dict[str, Any]]:
     return None
 
 
-def get_trendline_series(symbol: str, tf_name: str) -> Optional[List[Dict[str, Any]]]:
+def get_trendline_series(symbol: str, tf_name: str, as_of_bar_time: Optional[int] = None) -> Optional[Dict[str, Any]]:
     """
-    Trả về chuỗi điểm trendline (time, value) để vẽ lên chart.
-    Ưu tiên: pattern Bearish/Bullish → Cảnh báo sớm → fallback đỉnh đầu–đỉnh cuối (để cặp đã gợi ý vẫn luôn có đường khi mở chart).
+    Trả về trendline + metadata để FE vẽ đúng và hiển thị cách nhìn của hệ thống.
+    - trendline: list [{time, value}] để vẽ đường.
+    - pattern: MẪU_1_BEARISH | MẪU_2_BULLISH | MẪU_3_PHÁ_VỠ_SUPPORT | CẢNH_BÁO_SỚM | null.
+    - trend_lookback: số nến cửa sổ (vd 15).
+    - peak_bar_times: [time1, time2] hai nến dùng để vẽ trendline (đỉnh hoặc đáy).
+    - squeeze_zone: { start_time, end_time } vùng xiết = các nến giữa hai peak.
+    - peak_type: "high" (resistance) | "low" (support).
+    - as_of_bar_time: nếu có, chỉ dùng nến có time <= giá trị này (xem chart từ History đúng thời điểm).
     """
     tf_val = TF_MAP.get(tf_name)
     if tf_val is None:
         return None
     df = get_rates(symbol, tf_val, 200)
+    if df is not None and as_of_bar_time is not None:
+        df = df[df["time"] <= as_of_bar_time].copy()
     cfg = get_config()
     trend_lookback = int(cfg.get("TREND_LOOKBACK_BARS", 15))
     squeeze_bars = int(cfg["SQUEEZE_BARS"])
@@ -714,15 +761,27 @@ def get_trendline_series(symbol: str, tf_name: str) -> Optional[List[Dict[str, A
         if peak_indices and len(peak_indices) >= 2:
             win = df.tail(trend_lookback).reset_index(drop=True)
             times = win["time"]
+            p1, p2 = int(peak_indices[0]), int(peak_indices[-1])
             out = []
-            for i in range(peak_indices[0], peak_indices[-1] + 1):
+            for i in range(p1, p2 + 1):
                 if i < 0 or i >= len(times):
                     continue
                 val = slope * i + intercept
                 out.append({"time": int(times.iloc[i]), "value": round(float(val), 5)})
             if out:
-                return out
-    # Có tín hiệu Cảnh báo sớm (BUY): trả trendline resistance giảm dần để bấm Chart thấy đúng đường
+                t1 = int(times.iloc[p1])
+                t2 = int(times.iloc[p2])
+                pattern = data.get("pattern", "")
+                peak_type = "high" if pattern == "MẪU_1_BEARISH" else "low"
+                return {
+                    "trendline": out,
+                    "pattern": pattern,
+                    "trend_lookback": trend_lookback,
+                    "peak_bar_times": [t1, t2],
+                    "squeeze_zone": {"start_time": t1, "end_time": t2},
+                    "peak_type": peak_type,
+                }
+    # Cảnh báo sớm (BUY): trendline resistance giảm dần
     if len(df) >= 25:
         early = _check_early_breakout(df)
         if early is not None:
@@ -737,9 +796,29 @@ def get_trendline_series(symbol: str, tf_name: str) -> Optional[List[Dict[str, A
                     val = value_at(t)
                     out.append({"time": int(t), "value": round(float(val), 5)})
                 if out:
-                    return out
-    # Fallback: cặp này có thể vừa được gợi ý (data lệch 1–2 nến) nên vẫn vẽ trendline đơn giản (đỉnh đầu–đỉnh cuối) để chart luôn có đường
-    return _get_simple_trendline_series(df, trend_lookback)
+                    return {
+                        "trendline": out,
+                        "pattern": "CẢNH_BÁO_SỚM",
+                        "trend_lookback": trend_lookback,
+                        "peak_bar_times": None,
+                        "squeeze_zone": None,
+                        "peak_type": "high",
+                    }
+    # Fallback: trendline đơn giản đỉnh đầu–đỉnh cuối; thử nhiều cửa sổ để chart (vd từ History) vẫn có trendline
+    for lb in [trend_lookback, 25, 40, 60]:
+        if lb > len(df):
+            continue
+        simple = _get_simple_trendline_series(df, lb)
+        if simple:
+            return {
+                "trendline": simple,
+                "pattern": None,
+                "trend_lookback": lb,
+                "peak_bar_times": None,
+                "squeeze_zone": None,
+                "peak_type": "high",
+            }
+    return None
 
 
 def _get_simple_trendline_series(df: pd.DataFrame, trend_lookback: int) -> Optional[List[Dict[str, Any]]]:

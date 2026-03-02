@@ -107,7 +107,9 @@ def has_position_for_symbol(symbol: str, is_buy: bool, magic: int) -> bool:
 def get_pip_size(symbol: str) -> Optional[float]:
     """
     Trả về kích thước 1 pip (đơn vị giá) cho symbol.
-    Forex 5-digit: point=0.00001 -> pip=0.0001 (10*point); JPY: 10*point; Vàng có thể point=0.01 -> pip=0.1.
+    Forex 5-digit: point=0.00001 -> pip=0.0001 (10*point).
+    Forex 6-digit (nhiều broker): point=0.000001 -> 1 pip vẫn = 0.0001 trong giá = 100*point (nếu chỉ 10*point thì TP sẽ chỉ ~0.1 pip → lãi ~0.02$ thay vì 2$).
+    JPY: 1 pip = 0.01; vàng point=0.01 -> pip=0.1.
     """
     info = _get_symbol_info(symbol)
     if info is None:
@@ -115,10 +117,14 @@ def get_pip_size(symbol: str) -> Optional[float]:
     point = getattr(info, "point", None)
     if point is None or point <= 0:
         return None
-    # 1 pip = 10 * point cho hầu hết cặp forex; vàng thường point lớn hơn
     if point >= 0.01:
         return 10 * point  # e.g. XAUUSD point=0.01 -> pip=0.1
-    return 10 * point
+    if point >= 0.0001:
+        return 10 * point  # JPY: point=0.001 -> pip=0.01
+    # 5-digit: point=0.00001 -> pip=0.0001; 6-digit: point=0.000001 -> pip=0.0001 (100*point)
+    if point >= 0.00001:
+        return 10 * point   # 5-digit
+    return 100 * point  # 6-digit: 1 pip = 0.0001 trong giá
 
 
 def round_price(symbol: str, price: float) -> Optional[float]:

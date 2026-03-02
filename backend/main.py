@@ -4,14 +4,15 @@ import asyncio
 import json
 import logging
 from contextlib import asynccontextmanager
-from typing import Dict, List, Set
+from datetime import datetime, timezone
+from typing import Dict, List, Optional, Set
 
 from fastapi import Body, FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from backend import models
-from backend.config import get_config, save_config
+from backend.config import get_config, get_symbol_lists, save_config
 from backend.db import get_history, init_db, save_detections
 from backend.mt5_connector import (
     close_position,
@@ -47,6 +48,17 @@ logger = logging.getLogger(__name__)
 ws_clients: Set[WebSocket] = set()
 
 
+def _is_weekend() -> bool:
+    """True nếu là cuối tuần (UTC): thị trường forex đóng, chỉ quét crypto."""
+    return datetime.now(timezone.utc).weekday() >= 5  # 5=Saturday, 6=Sunday
+
+
+def get_symbols_to_scan() -> List[str]:
+    """Danh sách symbol cần quét: cuối tuần = chỉ crypto (nhẹ), ngày thường = full list."""
+    weekday_symbols, weekend_symbols = get_symbol_lists()
+    return weekend_symbols if _is_weekend() else weekday_symbols
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
@@ -75,7 +87,15 @@ async def background_scanner(app: FastAPI):
     while True:
         try:
             import time
-            all_signals, _, scan_status = run_scan()
+            symbols = get_symbols_to_scan()
+            if cycle == 1 and symbols:
+                logger.info(
+                    "[MT5 scan] %s mode: %s pairs (%s)",
+                    "weekend (crypto only)" if _is_weekend() else "weekday",
+                    len(symbols),
+                    ", ".join(symbols[:8]) + ("..." if len(symbols) > 8 else ""),
+                )
+            all_signals, _, scan_status = run_scan(symbols=symbols)
             cycle += 1
             n_ok = scan_status.get("symbols_with_data", 0)
             n_total = scan_status.get("total_checked", 0)
@@ -244,11 +264,12 @@ async def background_scanner(app: FastAPI):
                         if pip_value is None or pip_value <= 0:
                             logger.warning("Auto trade skip %s: no pip value", symbol)
                             continue
-                        # Lot sao cho lỗ = FIXED_RISK_USD khi chạm SL; giới hạn bởi cấu hình
+                        # Lot sao cho lỗ = FIXED_RISK_USD khi chạm SL; giới hạn bởi cấu hình (min/max lot)
                         lot = MAX_LOSS_USD / (sl_distance_pips * pip_value)
                         lot = round(lot, 2)
                         max_lot = float(cfg.get("AUTO_TRADE_LOT", 10.0))
-                        lot = max(0.01, min(lot, max_lot))
+                        min_lot = float(cfg.get("AUTO_TRADE_MIN_LOT", getattr(models, "AUTO_TRADE_MIN_LOT", 0.01)))
+                        lot = max(min_lot, min(lot, max_lot))
                         # TP theo FIXED_PROFIT_USD: profit = lot * tp_distance_pips * pip_value
                         if TARGET_PROFIT_USD > 0 and pip_value and lot:
                             tp_distance_pips = TARGET_PROFIT_USD / (lot * pip_value)
@@ -283,12 +304,12 @@ async def background_scanner(app: FastAPI):
                         # Recompute lot if SL was clamped (risk stays MAX_LOSS_USD)
                         lot = MAX_LOSS_USD / (sl_distance_pips * pip_value)
                         lot = round(lot, 2)
-                        lot = max(0.01, min(lot, max_lot))
+                        lot = max(min_lot, min(lot, max_lot))
                         # Hệ số nhân lot (chủ động tăng/giảm để đánh giá chiến lược)
                         lot_mult = float(cfg.get("AUTO_TRADE_LOT_MULTIPLIER", 1.0))
                         if lot_mult != 1.0:
                             lot = round(lot * lot_mult, 2)
-                            lot = max(0.01, min(lot, max_lot))
+                            lot = max(min_lot, min(lot, max_lot))
                         # TP phải tính từ giá khớp thực tế (tick), không phải entry từ tín hiệu — nếu không khi lệnh khớp lệch vài pip thì chạm TP chỉ lãi 0.1–0.2$
                         fill_price = None
                         tick = mt5.symbol_info_tick(symbol)
@@ -312,10 +333,20 @@ async def background_scanner(app: FastAPI):
                                 tp_price = base_price + min_tp_pips * pip_size
                             else:
                                 tp_price = base_price - min_tp_pips * pip_size
+                        expected_profit_usd = (lot * pip_value) * tp_distance_pips
+                        if pip_size and (fill_price is not None or entry):
+                            base = fill_price if fill_price is not None else entry
+                            actual_tp_pips = abs(tp_price - base) / pip_size
+                            expected_profit_usd = lot * pip_value * actual_tp_pips
+                        if expected_profit_usd < TARGET_PROFIT_USD * 0.2:
+                            logger.warning(
+                                "[Auto trade] TP %s: kỳ vọng lãi ~%.2f$ (thiết lập %.0f$). pip_size=%.6f pip_value=%.2f — kiểm tra broker 5/6 digit.",
+                                symbol, expected_profit_usd, TARGET_PROFIT_USD, pip_size or 0, pip_value or 0,
+                            )
                         logger.info(
-                            "[Auto trade] Đặt lệnh: %s %s lot=%s entry=%.5f sl=%.5f tp=%.5f (tp_dist≈%.1f pip, kỳ vọng lãi ~%.1f$)",
+                            "[Auto trade] Đặt lệnh: %s %s lot=%s entry=%.5f sl=%.5f tp=%.5f (tp_dist≈%.1f pip, kỳ vọng lãi ~%.2f$)",
                             symbol, "BUY" if is_buy else "SELL", lot, entry, sl_price, tp_price,
-                            tp_distance_pips, (lot * pip_value) * tp_distance_pips,
+                            tp_distance_pips, expected_profit_usd,
                         )
                         ok, res, msg = place_market_order(
                             symbol, is_buy, lot, sl_price, tp_price,
@@ -363,8 +394,8 @@ app.add_middleware(
 
 @app.get("/symbols")
 def get_symbols():
-    """Return list of symbols from config."""
-    return JSONResponse(content=models.DEFAULT_SYMBOLS)
+    """Return list of symbols đang được quét (ngày thường = full, cuối tuần = chỉ crypto)."""
+    return JSONResponse(content=get_symbols_to_scan())
 
 
 @app.get("/settings")
@@ -416,13 +447,15 @@ def get_rates_endpoint(symbol: str, tf: str = "M15", count: int = 200):
 
 
 @app.get("/chart-indicators")
-def get_chart_indicators(symbol: str, tf: str = "M15"):
-    """Return trendline series for chart (đường xu hướng dùng để khuyến nghị)."""
+def get_chart_indicators(symbol: str, tf: str = "M15", bar_time: Optional[int] = None):
+    """Return trendline + metadata for chart. bar_time: xem trendline đúng thời điểm (vd từ History)."""
     tf_key = (tf or "M15").strip().upper()
     if tf_key not in TF_MAP:
         return JSONResponse(content={"trendline": None})
-    series = get_trendline_series(symbol, tf_key)
-    return JSONResponse(content={"trendline": series})
+    result = get_trendline_series(symbol, tf_key, as_of_bar_time=bar_time)
+    if result is None:
+        return JSONResponse(content={"trendline": None})
+    return JSONResponse(content=result)
 
 
 # Magic của lệnh từ scanner/auto trade
