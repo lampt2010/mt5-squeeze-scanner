@@ -8,13 +8,13 @@ for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":8080.*LISTENING"') do taskk
 timeout /t 2 /nobreak >nul
 
 echo Starting Backend (port 8000)...
-start "MT5 Backend" cmd /k "cd /d "%~dp0" && python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000"
+start "MT5 Backend" cmd /k "cd /d "%~dp0" &&  c:\Users\lampt\AppData\Local\Programs\Python\Python38\python.exe -m uvicorn backend.main:app --host 0.0.0.0 --port 8000"
 
 echo Waiting for backend to start...
 timeout /t 4 /nobreak >nul
 
 echo Starting Frontend (port 8080)...
-start "MT5 Frontend" cmd /k "cd /d "%~dp0\frontend" && python -m http.server 8080"
+start "MT5 Frontend" cmd /k "cd /d "%~dp0\frontend" &&  c:\Users\lampt\AppData\Local\Programs\Python\Python38\python.exe -m http.server 8080"
 
 echo.
 echo Backend: http://127.0.0.1:8000

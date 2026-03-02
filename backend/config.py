@@ -57,7 +57,7 @@ def _validate(key: str, value: Any) -> bool:
     if key == "MA21_NEAR_ATR_RATIO":
         return isinstance(value, (int, float)) and 0.1 <= value <= 1.0
     if key == "BAND_TOLERANCE_ATR_RATIO":
-        return isinstance(value, (int, float)) and 0.05 <= value <= 0.35
+        return isinstance(value, (int, float)) and 0.05 <= value <= 0.5
     if key == "MIN_PEAKS":
         return isinstance(value, (int, float)) and 2 <= value <= 10
     if key == "MIN_BARS_IN_BAND_RATIO":

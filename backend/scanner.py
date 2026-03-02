@@ -218,7 +218,7 @@ def _compute_fixed_risk_buy(
     }
 
 
-def _check_bearish_squeeze(df: pd.DataFrame) -> Optional[Dict[str, Any]]:
+def _check_bearish_squeeze(df: pd.DataFrame, symbol: Optional[str] = None, timeframe: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """Mẫu 1: Bearish Squeeze at end of downtrend. Xác định trend chỉ dùng TREND_LOOKBACK_BARS nến gần nhất."""
     cfg = get_config()
     trend_lookback = int(cfg.get("TREND_LOOKBACK_BARS", 15))
@@ -226,9 +226,9 @@ def _check_bearish_squeeze(df: pd.DataFrame) -> Optional[Dict[str, Any]]:
     atr_ratio = cfg["ATR_SQUEEZE_RATIO"]
     slope_min = cfg["SLOPE_MIN_ABS"]
     ma21_near = cfg["MA21_NEAR_ATR_RATIO"]
-    band_tol_ratio = cfg.get("BAND_TOLERANCE_ATR_RATIO", 0.15)
+    band_tol_ratio = cfg.get("BAND_TOLERANCE_ATR_RATIO", 0.38)
     min_peaks = int(cfg.get("MIN_PEAKS", 3))
-    min_in_band_ratio = cfg.get("MIN_BARS_IN_BAND_RATIO", 1.0)
+    min_in_band_ratio = cfg.get("MIN_BARS_IN_BAND_RATIO", 0.60)
     band_center_ratio = cfg.get("BAND_CENTER_MIN_RATIO", 0.15)
 
     n = len(df)
@@ -276,18 +276,40 @@ def _check_bearish_squeeze(df: pd.DataFrame) -> Optional[Dict[str, Any]]:
 
     tol = band_tol_ratio * atr_val
     ma21_vals = ma21_full.iloc[-squeeze_bars:].values
+    # === DEBUG BAND - SQUEEZE ===
+    _sym = symbol if symbol is not None else "?"
+    _tf = timeframe if timeframe is not None else "?"
+    print(f"\n=== DEBUG SQUEEZE {_sym} {_tf} (BEARISH) ===")
+    inside_count = 0
+    for i in range(squeeze_bars):
+        ti = len(win) - squeeze_bars + i
+        tl_val = slope * ti + intercept
+        ma_val = ma21_vals[i]
+        high = float(squeeze_win["high"].iloc[i])
+        low = float(squeeze_win["low"].iloc[i])
+        upper = tl_val + tol
+        lower = ma_val - tol
+        inside = (low >= lower and high <= upper)
+        if inside:
+            inside_count += 1
+        print(f"Bar {i:2d} | H={high:.5f} L={low:.5f} | TL={tl_val:.5f} MA={ma_val:.5f} | tol={tol:.5f} | INSIDE={inside}")
+    print(f"→ Inside: {inside_count}/{squeeze_bars} = {inside_count/squeeze_bars*100:.1f}% (cần >= {min_in_band_ratio*100}%)")
     in_band = 0
     in_center = 0
     for i in range(squeeze_bars):
         bar_open = float(squeeze_win["open"].iloc[i])
         bar_close = float(squeeze_win["close"].iloc[i])
+        bar_high = float(squeeze_win["high"].iloc[i])
+        bar_low = float(squeeze_win["low"].iloc[i])
         body_low = min(bar_open, bar_close)
         body_high = max(bar_open, bar_close)
         ti = len(win) - squeeze_bars + i  # chỉ số bar trong win
         tl_val = slope * ti + intercept
         ma = ma21_vals[i]
-        # Thân nến (body) phải nằm trong band: dưới trendline, trên MA21 (không chỉ râu)
-        if body_high <= tl_val + tol and body_low >= ma - tol:
+        # Toàn bộ nến (high/low) phải nằm trong band: giữa MA21 và trendline, tránh cảnh báo khi nhiều nến ngoài band
+        upper = tl_val + tol
+        lower = ma - tol
+        if bar_low >= lower and bar_high <= upper:
             in_band += 1
         # Nến phải nằm "giữa" band: close không sát trendline hay MA21 (đúng mẫu hình 2)
         band_width = tl_val - ma
@@ -319,7 +341,7 @@ def _check_bearish_squeeze(df: pd.DataFrame) -> Optional[Dict[str, Any]]:
     }
 
 
-def _check_bullish_squeeze(df: pd.DataFrame) -> Optional[Dict[str, Any]]:
+def _check_bullish_squeeze(df: pd.DataFrame, symbol: Optional[str] = None, timeframe: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """Mẫu 2: Bullish Squeeze at end of uptrend. Xác định trend chỉ dùng TREND_LOOKBACK_BARS nến gần nhất."""
     cfg = get_config()
     trend_lookback = int(cfg.get("TREND_LOOKBACK_BARS", 15))
@@ -327,9 +349,9 @@ def _check_bullish_squeeze(df: pd.DataFrame) -> Optional[Dict[str, Any]]:
     atr_ratio = cfg["ATR_SQUEEZE_RATIO"]
     slope_min = cfg["SLOPE_MIN_ABS"]
     ma21_near = cfg["MA21_NEAR_ATR_RATIO"]
-    band_tol_ratio = cfg.get("BAND_TOLERANCE_ATR_RATIO", 0.15)
+    band_tol_ratio = cfg.get("BAND_TOLERANCE_ATR_RATIO", 0.38)
     min_peaks = int(cfg.get("MIN_PEAKS", 3))
-    min_in_band_ratio = cfg.get("MIN_BARS_IN_BAND_RATIO", 1.0)
+    min_in_band_ratio = cfg.get("MIN_BARS_IN_BAND_RATIO", 0.60)
     band_center_ratio = cfg.get("BAND_CENTER_MIN_RATIO", 0.15)
 
     n = len(df)
@@ -372,18 +394,40 @@ def _check_bullish_squeeze(df: pd.DataFrame) -> Optional[Dict[str, Any]]:
 
     ma21_vals = ma21_full.iloc[-squeeze_bars:].values
     tol = band_tol_ratio * atr_val
+    # === DEBUG BAND - SQUEEZE ===
+    _sym = symbol if symbol is not None else "?"
+    _tf = timeframe if timeframe is not None else "?"
+    print(f"\n=== DEBUG SQUEEZE {_sym} {_tf} (BULLISH) ===")
+    inside_count = 0
+    for i in range(squeeze_bars):
+        ti = len(win) - squeeze_bars + i
+        tl_val = slope * ti + intercept
+        ma_val = ma21_vals[i]
+        high = float(squeeze_win["high"].iloc[i])
+        low = float(squeeze_win["low"].iloc[i])
+        upper = ma_val + tol
+        lower = tl_val - tol
+        inside = (low >= lower and high <= upper)
+        if inside:
+            inside_count += 1
+        print(f"Bar {i:2d} | H={high:.5f} L={low:.5f} | TL={tl_val:.5f} MA={ma_val:.5f} | tol={tol:.5f} | INSIDE={inside}")
+    print(f"→ Inside: {inside_count}/{squeeze_bars} = {inside_count/squeeze_bars*100:.1f}% (cần >= {min_in_band_ratio*100}%)")
     in_band = 0
     in_center = 0
     for i in range(squeeze_bars):
         bar_open = float(squeeze_win["open"].iloc[i])
         bar_close = float(squeeze_win["close"].iloc[i])
+        bar_high = float(squeeze_win["high"].iloc[i])
+        bar_low = float(squeeze_win["low"].iloc[i])
         body_low = min(bar_open, bar_close)
         body_high = max(bar_open, bar_close)
         ti = len(win) - squeeze_bars + i
         tl_val = slope * ti + intercept
         ma = ma21_vals[i]
-        # Thân nến (body) phải nằm trong band: trên trendline (support), dưới MA21
-        if body_low >= tl_val - tol and body_high <= ma + tol:
+        # Toàn bộ nến (high/low) phải nằm trong band: giữa trendline và MA21, tránh cảnh báo khi nhiều nến ngoài band
+        lower = tl_val - tol
+        upper = ma + tol
+        if bar_low >= lower and bar_high <= upper:
             in_band += 1
         # Nến phải nằm "giữa" band: close không sát trendline hay MA21 (đúng mẫu)
         band_width = ma - tl_val
@@ -789,8 +833,8 @@ def run_scan(symbols: Optional[List[str]] = None) -> Tuple[List[Dict[str, Any]],
             if df is None or len(df) < min_bars + 1:
                 continue
             symbols_with_data += 1
-            bear = _check_bearish_squeeze(df)
-            bull = _check_bullish_squeeze(df)
+            bear = _check_bearish_squeeze(df, symbol=symbol, timeframe=tf_name)
+            bull = _check_bullish_squeeze(df, symbol=symbol, timeframe=tf_name)
             breakdown_support = _check_bearish_breakdown_support(df)
             early = _check_early_breakout(df)
             cands = []

@@ -136,19 +136,19 @@
         <tr>
           <td>TRENDLINE_BARS</td>
           <td class="settings-desc">Số đỉnh (bearish) hoặc đáy (bullish) dùng để vẽ đường xu hướng. <strong>Khuyên: giữ 10.</strong></td>
-          <td class="settings-default">10</td>
+          <td class="settings-default">6</td>
           <td><input type="number" id="set-TRENDLINE_BARS" min="2" max="25" step="1" placeholder="6" /></td>
         </tr>
         <tr>
           <td>SQUEEZE_BARS</td>
           <td class="settings-desc">Số nến “vùng xiết”: các nến này phải nhỏ (body nhỏ) và nằm giữa trendline và MA21. <strong>Khuyên: giữ 8.</strong></td>
-          <td class="settings-default">8</td>
+          <td class="settings-default">6</td>
           <td><input type="number" id="set-SQUEEZE_BARS" min="4" max="20" step="1" placeholder="8" /></td>
         </tr>
         <tr>
           <td>ATR_SQUEEZE_RATIO</td>
           <td class="settings-desc">Vùng squeeze chỉ hợp lệ khi body trung bình &lt; <em>giá trị này × ATR</em>. <strong>Tăng</strong> (vd 0.5) = chấp nhận nến to hơn = nhiều tín hiệu hơn. <strong>Giảm</strong> (vd 0.3) = chỉ nến rất nhỏ = ít tín hiệu, chặt hơn. <strong>Mặc định: 0.4.</strong></td>
-          <td class="settings-default">0.4</td>
+          <td class="settings-default">0.5</td>
           <td><input type="number" id="set-ATR_SQUEEZE_RATIO" min="0.1" max="0.9" step="0.05" placeholder="0.4" /></td>
         </tr>
         <tr>
@@ -165,15 +165,15 @@
         </tr>
         <tr>
           <td>BAND_TOLERANCE_ATR_RATIO</td>
-          <td class="settings-desc">Độ rộng band (trendline–MA21) cho phép: ± <em>giá trị × ATR</em>. <strong>0.15</strong> = chặt (nến phải thật sự nằm giữa). Tăng (vd 0.25) = nhiều tín hiệu hơn. <strong>Mặc định: 0.15.</strong></td>
-          <td class="settings-default">0.15</td>
-          <td><input type="number" id="set-BAND_TOLERANCE_ATR_RATIO" min="0.05" max="0.35" step="0.05" placeholder="0.15" /></td>
+          <td class="settings-desc">Độ rộng band (trendline–MA21) cho phép: ± <em>giá trị × ATR</em>. <strong>0.15</strong> = chặt (nến phải thật sự nằm giữa). Tăng (vd 0.25) = nhiều tín hiệu hơn. <strong>Mặc định: 0.38.</strong></td>
+          <td class="settings-default">0.38</td>
+          <td><input type="number" id="set-BAND_TOLERANCE_ATR_RATIO" min="0.05" max="0.5" step="0.05" placeholder="0.38" /></td>
         </tr>
         <tr>
           <td>MIN_BARS_IN_BAND_RATIO</td>
-          <td class="settings-desc">Tỷ lệ nến squeeze phải nằm trong band. <strong>1</strong> = 100% (đúng mẫu: mọi nến giữa trendline và MA21). Giảm (vd 0.75) = nhiều tín hiệu, dễ lệch mẫu. <strong>Mặc định: 1.</strong></td>
-          <td class="settings-default">1</td>
-          <td><input type="number" id="set-MIN_BARS_IN_BAND_RATIO" min="0.3" max="1" step="0.05" placeholder="1" /></td>
+          <td class="settings-desc">Tỷ lệ nến squeeze phải nằm trong band. <strong>1</strong> = 100% (đúng mẫu: mọi nến giữa trendline và MA21). Giảm (vd 0.75) = nhiều tín hiệu, dễ lệch mẫu. <strong>Mặc định: 0.6.</strong></td>
+          <td class="settings-default">0.6</td>
+          <td><input type="number" id="set-MIN_BARS_IN_BAND_RATIO" min="0.3" max="1" step="0.05" placeholder="0.6" /></td>
         </tr>
         <tr>
           <td>BAND_CENTER_MIN_RATIO</td>
@@ -190,7 +190,7 @@
         <tr>
           <td>AUTO_TRADE_ENABLED</td>
           <td class="settings-desc">Bật đặt lệnh tự động khi có signal <strong>M15, M30 hoặc H1</strong>: lệnh market, SL = MA21 ± 10 pip, <strong>lot tự tính</strong> để lỗ tối đa 20$, <strong>RR 1:2</strong>. Tối đa <strong>3 lệnh</strong> cùng lúc. <strong>Chỉ dùng khi đã test kỹ (demo).</strong></td>
-          <td class="settings-default">Tắt</td>
+          <td class="settings-default">Bật</td>
           <td><input type="checkbox" id="set-AUTO_TRADE_ENABLED" /></td>
         </tr>
         <tr>
@@ -237,9 +237,9 @@
         </tr>
         <tr>
           <td>FIXED_PROFIT_USD</td>
-          <td class="settings-desc">Lợi nhuận mục tiêu SELL (USD) → đóng lệnh khi đạt hoặc set TP price. <strong>Mặc định: 15.</strong></td>
-          <td class="settings-default">15</td>
-          <td><input type="number" id="set-FIXED_PROFIT_USD" min="0.1" max="500" step="0.5" placeholder="15" /></td>
+          <td class="settings-desc">Lợi nhuận mục tiêu SELL (USD) → đóng lệnh khi đạt hoặc set TP price. <strong>Mặc định: 20.</strong></td>
+          <td class="settings-default">20</td>
+          <td><input type="number" id="set-FIXED_PROFIT_USD" min="0.1" max="500" step="0.5" placeholder="20" /></td>
         </tr>
         <tr>
           <td>SL_MULTIPLIER</td>

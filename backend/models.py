@@ -23,9 +23,9 @@ SQUEEZE_BARS = 5            # Cửa sổ squeeze ngắn hơn (8→5) → dễ th
 ATR_SQUEEZE_RATIO = 0.55    # Avg body < 55% ATR (0.4→0.55: cho phép nến to hơn một chút)
 SLOPE_MIN_ABS = 0.00005     # Slope tối thiểu (giảm: trendline thoải hơn vẫn chấp nhận)
 MA21_NEAR_ATR_RATIO = 0.5   # Nến cuối trong ±0.5*ATR của MA21 (0.3→0.5: nới hơn)
-BAND_TOLERANCE_ATR_RATIO = 0.15  # Band hẹp hơn: nến phải thật sự nằm giữa trendline và MA21
+BAND_TOLERANCE_ATR_RATIO = 0.38  # Band rộng hơn (sweet spot): nến trong khoảng trendline–MA21
 MIN_PEAKS = 3               # Số peak/đáy tối thiểu (5→3: ít đỉnh hơn vẫn vẽ được trendline)
-MIN_BARS_IN_BAND_RATIO = 1.0    # 100% nến squeeze phải nằm trong band (giữa trendline và MA21), đúng mẫu
+MIN_BARS_IN_BAND_RATIO = 0.60   # 60% nến squeeze phải nằm trong band (giữa trendline và MA21)
 BAND_CENTER_MIN_RATIO = 0.15    # Nến phải nằm "giữa" band: close cách mỗi biên ít nhất 15% độ rộng band (không dính sát trendline/MA21)
 
 # Watchlist: only signals within this window (minutes) are "hot"
