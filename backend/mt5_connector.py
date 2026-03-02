@@ -121,6 +121,55 @@ def get_pip_size(symbol: str) -> Optional[float]:
     return 10 * point
 
 
+def _tick_value_per_lot_fallback(symbol: str, point: float, tick_size: float, contract_size: float) -> float:
+    """Fallback $ per tick per 1 lot khi trade_tick_value_profit = 0 hoặc không đáng tin (đồng bộ với scanner)."""
+    s = (symbol or "").upper().replace(" ", "")
+    if point <= 0:
+        return 0.0
+    if s in ("EURUSD", "GBPUSD", "AUDUSD", "NZDUSD") or (len(s) == 6 and s.endswith("USD") and not s.startswith("USD")):
+        pip_value = 10.0
+        pip_size = 10 * point
+        if pip_size > 0:
+            return pip_value * (tick_size / pip_size)
+    if s == "USDJPY" or (len(s) == 6 and "JPY" in s):
+        return (1000.0 / 100.0) * (tick_size / (10 * point)) if point < 0.01 else 0.01
+    if s == "XAUUSD":
+        return 1.0 * (tick_size / 0.01) if tick_size > 0 else 1.0
+    if s == "BTCUSD":
+        return float(contract_size) * point * (tick_size / point) if point > 0 else 0.0
+    return 10.0 * (tick_size / (10 * point)) if (10 * point) > 0 else 0.0
+
+
+def get_tp_price_for_fixed_profit(
+    symbol: str, volume: float, profit_usd: float, fill_price: float, is_buy: bool
+) -> Optional[float]:
+    """
+    Tính giá TP để đạt đúng profit_usd khi đóng tại TP (dùng tick value của broker, tránh TP sát entry → lãi 0.02$).
+    Công thức giống scanner: ticks_for_profit = profit_usd / (lot * tick_value), tp_distance = ticks * tick_size.
+    """
+    if not symbol or volume <= 0 or profit_usd <= 0 or fill_price <= 0:
+        return None
+    info = _get_symbol_info(symbol)
+    if info is None:
+        return None
+    point = getattr(info, "point", None) or 0.00001
+    tick_size = getattr(info, "trade_tick_size", None) or point
+    contract_size = getattr(info, "trade_contract_size", 100000)
+    tick_value = getattr(info, "trade_tick_value_profit", None) or 0.0
+    if tick_value is None or tick_value <= 0:
+        tick_value = _tick_value_per_lot_fallback(symbol, point, tick_size, contract_size)
+    if tick_value <= 0 or tick_size <= 0:
+        return None
+    # profit_usd = volume * tick_value * (tp_distance_price / tick_size)  =>  tp_distance_price = profit_usd * tick_size / (volume * tick_value)
+    ticks_for_profit = profit_usd / (volume * tick_value)
+    tp_distance_price = ticks_for_profit * tick_size
+    if is_buy:
+        tp_price = fill_price + tp_distance_price
+    else:
+        tp_price = fill_price - tp_distance_price
+    return round_price(symbol, tp_price)
+
+
 def round_price(symbol: str, price: float) -> Optional[float]:
     """Làm tròn giá theo digits của symbol."""
     info = _get_symbol_info(symbol)

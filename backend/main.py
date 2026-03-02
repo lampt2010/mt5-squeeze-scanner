@@ -21,6 +21,7 @@ from backend.mt5_connector import (
     get_positions,
     get_rates,
     get_symbol_info,
+    get_tp_price_for_fixed_profit,
     has_position_for_symbol,
     initialize,
     partial_close_and_breakeven,
@@ -249,32 +250,14 @@ async def background_scanner(app: FastAPI):
                         lot = round(lot, 2)
                         max_lot = float(cfg.get("AUTO_TRADE_LOT", 10.0))
                         lot = max(0.01, min(lot, max_lot))
-                        # TP theo FIXED_PROFIT_USD: profit = lot * tp_distance_pips * pip_value
-                        if TARGET_PROFIT_USD > 0 and pip_value and lot:
-                            tp_distance_pips = TARGET_PROFIT_USD / (lot * pip_value)
-                            if is_buy:
-                                tp_price = entry + tp_distance_pips * pip_size
-                            else:
-                                tp_price = entry - tp_distance_pips * pip_size
-                        else:
-                            # Fallback: RR 1:2
-                            tp_distance_pips = 2.0 * sl_distance_pips
-                            if is_buy:
-                                tp_price = entry + tp_distance_pips * pip_size
-                            else:
-                                tp_price = entry - tp_distance_pips * pip_size
                         # MT5 requires: BUY -> SL < entry, TP > entry; SELL -> SL > entry, TP < entry (retcode 10016 = Invalid stops)
                         # If MA21 is on wrong side of entry, place SL same distance from entry on correct side
                         if is_buy:
                             if sl_price >= entry:
                                 sl_price = entry - SL_PIPS_FROM_MA21 * pip_size
-                            if tp_price <= entry:
-                                tp_price = entry + tp_distance_pips * pip_size
                         else:
                             if sl_price <= entry:
                                 sl_price = entry + SL_PIPS_FROM_MA21 * pip_size
-                            if tp_price >= entry:
-                                tp_price = entry - tp_distance_pips * pip_size
                         sl_distance_price = abs(entry - sl_price)
                         sl_distance_pips = sl_distance_price / pip_size if pip_size else 0
                         if sl_distance_pips <= 0:
@@ -289,22 +272,22 @@ async def background_scanner(app: FastAPI):
                         if lot_mult != 1.0:
                             lot = round(lot * lot_mult, 2)
                             lot = max(0.01, min(lot, max_lot))
-                        # TP phải tính từ giá khớp thực tế (tick), không phải entry từ tín hiệu — nếu không khi lệnh khớp lệch vài pip thì chạm TP chỉ lãi 0.1–0.2$
+                        # TP theo FIXED_PROFIT_USD: dùng tick value của broker (giống scanner) để TP đúng ~20$, tránh TP sát entry → đóng lãi 0.02$
                         fill_price = None
                         tick = mt5.symbol_info_tick(symbol)
                         if tick is not None:
                             fill_price = round_price(symbol, float(tick.ask if is_buy else tick.bid))
-                            if fill_price is not None:
-                                if is_buy:
-                                    tp_price = fill_price + tp_distance_pips * pip_size
-                                else:
-                                    tp_price = fill_price - tp_distance_pips * pip_size
-                                # Đảm bảo TP đúng phía so với fill
-                                if is_buy and tp_price <= fill_price:
-                                    tp_price = fill_price + tp_distance_pips * pip_size
-                                if not is_buy and tp_price >= fill_price:
-                                    tp_price = fill_price - tp_distance_pips * pip_size
                         base_price = fill_price if fill_price is not None else entry
+                        tp_price = get_tp_price_for_fixed_profit(
+                            symbol, lot, TARGET_PROFIT_USD, base_price, is_buy
+                        )
+                        if tp_price is None or (is_buy and tp_price <= base_price) or (not is_buy and tp_price >= base_price):
+                            # Fallback: RR 1:2 theo pip
+                            tp_distance_pips = 2.0 * sl_distance_pips
+                            if is_buy:
+                                tp_price = base_price + tp_distance_pips * pip_size
+                            else:
+                                tp_price = base_price - tp_distance_pips * pip_size
                         # Ép TP tối thiểu 1 pip để tránh làm tròn sát entry
                         min_tp_pips = 1.0
                         if pip_size and abs(tp_price - base_price) / pip_size < min_tp_pips:
@@ -312,10 +295,11 @@ async def background_scanner(app: FastAPI):
                                 tp_price = base_price + min_tp_pips * pip_size
                             else:
                                 tp_price = base_price - min_tp_pips * pip_size
+                        tp_distance_pips = abs(tp_price - base_price) / pip_size if pip_size else 0
                         logger.info(
-                            "[Auto trade] Đặt lệnh: %s %s lot=%s entry=%.5f sl=%.5f tp=%.5f (tp_dist≈%.1f pip, kỳ vọng lãi ~%.1f$)",
+                            "[Auto trade] Đặt lệnh: %s %s lot=%s entry=%.5f sl=%.5f tp=%.5f (tp_dist≈%.1f pip, kỳ vọng lãi ~%.0f$)",
                             symbol, "BUY" if is_buy else "SELL", lot, entry, sl_price, tp_price,
-                            tp_distance_pips, (lot * pip_value) * tp_distance_pips,
+                            tp_distance_pips, TARGET_PROFIT_USD,
                         )
                         ok, res, msg = place_market_order(
                             symbol, is_buy, lot, sl_price, tp_price,
