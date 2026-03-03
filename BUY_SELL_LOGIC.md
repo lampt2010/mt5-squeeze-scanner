@@ -51,7 +51,7 @@ Tài liệu mô tả cách backend **tự động** quét từng cặp tiền th
 | `TRENDLINE_BARS` | 6 | (Không dùng trong logic) Trendline = **đường nối đỉnh đầu và đỉnh cuối** (bearish) hoặc **đáy đầu và đáy cuối** (bullish) trong cửa sổ — hai điểm có thể xa nhau, không bắt buộc các bar gần nhau. |
 | `SQUEEZE_BARS` | 5 | Cửa sổ nến “squeeze” (nến nhỏ, ít biến động). |
 | `ATR_SQUEEZE_RATIO` | 0.55 | Trung bình \|body\| nến squeeze < ATR × tỷ lệ này. |
-| `SLOPE_MIN_ABS` | 0.00005 | Slope tối thiểu (trendline không quá ngang). |
+| `SLOPE_MIN_ABS` | 0.0001 | Slope tối thiểu (trendline không quá ngang); đối chiếu ảnh mẫu. |
 | `MA21_NEAR_ATR_RATIO` | 0.5 | Nến cuối: \|close - MA21\| ≤ ATR × tỷ lệ. |
 | `BAND_TOLERANCE_ATR_RATIO` | 0.15 | Band hẹp: nến phải thật sự nằm giữa trendline và MA21. |
 | `MIN_PEAKS` | 3 | Số peak (đỉnh/đáy) tối thiểu để vẽ trendline. |

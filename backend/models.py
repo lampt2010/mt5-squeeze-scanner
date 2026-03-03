@@ -21,7 +21,7 @@ TREND_LOOKBACK_BARS = 15
 TRENDLINE_BARS = 6          # (Không dùng) Trendline giờ = đường nối đỉnh/đáy đầu và cuối trong cửa sổ; giữ key để tương thích config/UI.
 SQUEEZE_BARS = 5            # Cửa sổ squeeze ngắn hơn (8→5) → dễ thỏa
 ATR_SQUEEZE_RATIO = 0.55    # Avg body < 55% ATR (0.4→0.55: cho phép nến to hơn một chút)
-SLOPE_MIN_ABS = 0.00005     # Slope tối thiểu (giảm: trendline thoải hơn vẫn chấp nhận)
+SLOPE_MIN_ABS = 0.0001      # Slope tối thiểu (trendline không quá ngang); đối chiếu ảnh mẫu → 0.0001 hợp lý
 MA21_NEAR_ATR_RATIO = 0.5   # Nến cuối trong ±0.5*ATR của MA21 (0.3→0.5: nới hơn)
 BAND_TOLERANCE_ATR_RATIO = 0.38  # Band rộng hơn (sweet spot): nến trong khoảng trendline–MA21
 MIN_PEAKS = 3               # Số peak/đáy tối thiểu (5→3: ít đỉnh hơn vẫn vẽ được trendline)
